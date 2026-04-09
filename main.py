@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-每天对 4 个地点，批量调用 OpenWeatherMap Daily Aggregation API，
+每天对 5 个地点，批量调用 OpenWeatherMap Daily Aggregation API，
 采集 2025-04-01 ~ 2025-09-30 全部天数的气温和降雨数据，追加到 weather_data.csv。
 """
 import csv
@@ -10,6 +10,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
+import subprocess
 from datetime import datetime, timedelta, timezone
 
 # ── 配置 ──
@@ -70,6 +71,24 @@ def load_progress():
 def save_progress(index):
     with open(PROGRESS_FILE, "w") as f:
         json.dump({"last_index": index}, f)
+
+
+def git_commit_progress():
+    """将进度文件和数据文件 commit 并 push 回仓库"""
+    try:
+        subprocess.run(["git", "config", "user.name", "github-actions"], check=True)
+        subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
+        subprocess.run(["git", "add", PROGRESS_FILE, OUTPUT_CSV], check=True)
+        # 检查是否有变更
+        result = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True)
+        if result.returncode != 0:
+            subprocess.run(["git", "commit", "-m", "update: 采集进度和数据"], check=True)
+            subprocess.run(["git", "push"], check=True)
+            print("✅ 已 commit 并 push 进度。")
+        else:
+            print("  无需 commit，无变更。")
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️ git 操作失败: {e}")
 
 
 def ensure_output_header():
@@ -150,7 +169,7 @@ def main():
                 all_rows.append([tid, name, lat, lon, date_str] + [""] * 7)
                 fail += 1
 
-            # 每 10 天打印一次进度
+            # 每 50 天打印一次进度
             if (i + 1) % 50 == 0 or (i + 1) == len(DATES):
                 print(f"  {date_str}  ({i+1}/{len(DATES)})  OK:{success}  FAIL:{fail}")
 
@@ -170,6 +189,10 @@ def main():
         remaining = total - next_index
         days_left = (remaining + BATCH_SIZE - 1) // BATCH_SIZE
         print(f"剩余 {remaining} 个地点，约还需 {days_left} 天。")
+
+    # GitHub Actions 环境下自动 commit 并 push
+    if os.environ.get("GITHUB_ACTIONS"):
+        git_commit_progress()
 
 
 if __name__ == "__main__":
