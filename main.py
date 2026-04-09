@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-每天对 5 个地点，批量调用 OpenWeatherMap Daily Aggregation API，
-采集 2025-04-01 ~ 2025-09-30 全部天数的气温和降雨数据，追加到 weather_data.csv。
+每天批量调用 OpenWeatherMap Daily Aggregation API，
+采集气温和降雨数据，追加到 weather_data.csv，并将进度保存到 progress.json。
 """
 import csv
 import json
@@ -10,14 +10,13 @@ import sys
 import time
 import urllib.request
 import urllib.error
-import subprocess
 from datetime import datetime, timedelta, timezone
 
 # ── 配置 ──
 TOWNS_CSV = "townsNE.csv"
 OUTPUT_CSV = "weather_data.csv"
 PROGRESS_FILE = "progress.json"
-BATCH_SIZE = 5          # 每天处理地点数
+BATCH_SIZE = 5
 DATE_START = "2025-04-01"
 DATE_END = "2025-09-30"
 TZ_BEIJING = timezone(timedelta(hours=8))
@@ -45,7 +44,11 @@ print(f"日期范围: {DATE_START} ~ {DATE_END} ({len(DATES)} 天)")
 
 
 def load_towns():
+    """加载地点列表"""
     towns = []
+    if not os.path.exists(TOWNS_CSV):
+        print(f"ERROR: 找不到 {TOWNS_CSV}")
+        sys.exit(1)
     with open(TOWNS_CSV, "r", encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         for row in reader:
@@ -62,6 +65,7 @@ def load_towns():
 
 
 def load_progress():
+    """从本地 JSON 加载采集进度"""
     if os.path.exists(PROGRESS_FILE):
         with open(PROGRESS_FILE, "r") as f:
             return json.load(f).get("last_index", 0)
@@ -69,29 +73,13 @@ def load_progress():
 
 
 def save_progress(index):
+    """保存当前采集进度到 JSON"""
     with open(PROGRESS_FILE, "w") as f:
         json.dump({"last_index": index}, f)
 
 
-def git_commit_progress():
-    """将进度文件和数据文件 commit 并 push 回仓库"""
-    try:
-        subprocess.run(["git", "config", "user.name", "github-actions"], check=True)
-        subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
-        subprocess.run(["git", "add", PROGRESS_FILE, OUTPUT_CSV], check=True)
-        # 检查是否有变更
-        result = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True)
-        if result.returncode != 0:
-            subprocess.run(["git", "commit", "-m", "update: 采集进度和数据"], check=True)
-            subprocess.run(["git", "push"], check=True)
-            print("✅ 已 commit 并 push 进度。")
-        else:
-            print("  无需 commit，无变更。")
-    except subprocess.CalledProcessError as e:
-        print(f"⚠️ git 操作失败: {e}")
-
-
 def ensure_output_header():
+    """初始化 CSV 表头"""
     if not os.path.exists(OUTPUT_CSV) or os.path.getsize(OUTPUT_CSV) == 0:
         with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow([
@@ -103,6 +91,7 @@ def ensure_output_header():
 
 
 def fetch_daily(lat, lon, date_str):
+    """调用 API 获取单日天气汇总"""
     url = (
         f"https://api.openweathermap.org/data/3.0/onecall/day_summary"
         f"?lat={lat}&lon={lon}&date={date_str}"
@@ -122,7 +111,7 @@ def fetch_daily(lat, lon, date_str):
 
 
 def extract_row(tid, name, lat, lon, date_str, data):
-    """从 API 响应提取一行数据"""
+    """从 API 响应中提取 CSV 格式的数据行"""
     temp = data.get("temperature", {})
     precip = data.get("precipitation", {})
     return [
@@ -145,6 +134,8 @@ def main():
     start = load_progress()
     if start >= total:
         print("✅ 所有地点已采集完毕！")
+        # 如果你想采集完后自动从头开始，可以将 next_index 设为 0
+        save_progress(0) 
         return
 
     end = min(start + BATCH_SIZE, total)
@@ -173,26 +164,24 @@ def main():
             if (i + 1) % 50 == 0 or (i + 1) == len(DATES):
                 print(f"  {date_str}  ({i+1}/{len(DATES)})  OK:{success}  FAIL:{fail}")
 
-            # 请求间隔，避免触发限流
+            # 请求间隔，避免触发限流 (保持在 1秒以上)
             time.sleep(1.1)
 
-    # 一次性写入
+    # 一次性写入 CSV
     with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(all_rows)
 
+    # 计算下一次开始的索引
     next_index = end if end < total else 0
     save_progress(next_index)
+    
     print(f"\n完成。写入 {len(all_rows)} 条记录。")
     if next_index == 0:
-        print("🎉 全部 219 个地点采集完毕，已循环回起点。")
+        print("🎉 全部地点采集完毕，已循环回起点。")
     else:
         remaining = total - next_index
         days_left = (remaining + BATCH_SIZE - 1) // BATCH_SIZE
-        print(f"剩余 {remaining} 个地点，约还需 {days_left} 天。")
-
-    # GitHub Actions 环境下自动 commit 并 push
-    if os.environ.get("GITHUB_ACTIONS"):
-        git_commit_progress()
+        print(f"进度已更新。剩余 {remaining} 个地点，约还需 {days_left} 天。")
 
 
 if __name__ == "__main__":
