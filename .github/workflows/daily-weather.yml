@@ -38,7 +38,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           # 暂存数据文件和进度文件
-          git add weather_data.csv progress.json
+          git add 2025.csv progress.json
           
           # 检查是否有实际内容变更，避免空提交报错
           if git diff --cached --quiet; then
