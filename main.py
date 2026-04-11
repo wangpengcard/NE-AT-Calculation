@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 # ── 配置 ──
 TOWNS_CSV = "townsNE.csv"
-OUTPUT_CSV = "weather_data.csv"
+OUTPUT_CSV = "2025.csv"
 PROGRESS_FILE = "progress.json"
 BATCH_SIZE = 5
 DATE_START = "2025-04-01"
