@@ -165,7 +165,7 @@ def main():
                 print(f"  {date_str}  ({i+1}/{len(DATES)})  OK:{success}  FAIL:{fail}")
 
             # 请求间隔，避免触发限流 (保持在 1秒以上)
-            time.sleep(1.1)
+            time.sleep(1)
 
     # 一次性写入 CSV
     with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
