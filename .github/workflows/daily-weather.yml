@@ -2,8 +2,8 @@ name: Daily Weather Collector
 
 on:
   schedule:
-    # 每天北京时间 10:00 (UTC 02:00)运行
-    - cron: '0 2 * * *'
+    # 每天北京时间 10:13 (UTC 02:13)运行
+    - cron: '13 2 * * *'
   workflow_dispatch:
 
 # 必须赋予写权限，否则无法推送到仓库
